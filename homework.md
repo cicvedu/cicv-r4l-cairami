@@ -49,3 +49,12 @@ ip route add default via 10.0.2.1
 
 ping 10.0.2.2
 ![1699343830935](image/homework/1699343830935.png)
+
+### 问题1：编译成内核模块，是在哪个文件中以哪条语句定义的？
+在Kbuild中，obj-m := r4l_e1000_demo.o
+
+### 问题2：该模块位于独立的文件夹内，却能编译成Linux内核模块，这叫做out-of-tree module，请分析它是如何与内核代码产生联系的？
+Makefile中通过-C指定linux内核位置，而M=$(PWD)指定驱动源码位置。内核顶层的Makefile检查到M非空时，会编译该模块为外部module。
+ifeq ("$(origin M)", "command line")
+  KBUILD_EXTMOD := $(M)
+endif
