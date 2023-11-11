@@ -40,11 +40,28 @@ impl file::Operations for RustFile {
     }
 
     fn write(_this: &Self,_file: &file::File,_reader: &mut impl kernel::io_buffer::IoBufferReader,_offset:u64,) -> Result<usize> {
-        Err(EPERM)
+        let mut len = _reader.len();
+
+        if len > GLOBALMEM_SIZE {
+            len = GLOBALMEM_SIZE;
+        }
+
+        let contents = &mut *_this.inner.lock();
+        _reader.read_slice(&mut contents[..len])?;
+        
+        Ok(len)
     }
 
     fn read(_this: &Self,_file: &file::File,_writer: &mut impl kernel::io_buffer::IoBufferWriter,_offset:u64,) -> Result<usize> {
-        Err(EPERM)
+        let contents = &mut *_this.inner.lock();
+
+        if _offset as usize > GLOBALMEM_SIZE {
+            return Ok(0);
+        }
+
+        let data = &contents[_offset as usize..];
+        _writer.write_slice(data)?;
+        Ok(data.len())
     }
 }
 

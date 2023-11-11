@@ -86,3 +86,30 @@ endif
 运行src_e1000/build_image.sh，在linux shell下insmod rust_helloworld.ko
 
 ![1699450014904](image/homework/1699450014904.png)
+
+## 作业4：为e1000网卡驱动添加remove代码
+
+
+## 作业5：注册字符设备
+
+### 更改配置
+
+![1699687402826](image/homework/1699687402826.png)
+
+### 注册字符设备驱动，使/dev/cicv完成基本读写操作
+
+![1699687482042](image/homework/1699687482042.png)
+
+Q：作业5中的字符设备/dev/cicv是怎么创建的？它的设备号是多少？它是如何与我们写的字符设备驱动关联上的？
+
+在src_e1000目录里的build_image.sh，
+
+echo "mknod /dev/cicv c 248 0" >> etc/init.d/rcS
+
+其中/etc/init.d/rcS是一个启动脚本，负责在系统引导过程中执行各种初始化任务。
+
+使用mknod命令创建设备节点，用法如下：
+
+mknod /dev/节点名称 c 主设备号 次设备号
+
+因此/dev/cicv的主设备号是248，次设备号是0
