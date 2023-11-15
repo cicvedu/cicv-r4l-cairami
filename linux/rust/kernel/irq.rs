@@ -14,10 +14,11 @@ use crate::{
     error::{from_kernel_result, to_result},
     str::CString,
     types::PointerWrapper,
-    Error, Result, ScopeGuard,
+    Error, Result, ScopeGuard, pr_info,
 };
 use core::{fmt, marker::PhantomData, ops::Deref};
 use macros::vtable;
+
 
 /// The type of irq hardware numbers.
 pub type HwNumber = bindings::irq_hw_number_t;
@@ -356,6 +357,7 @@ impl<T: PointerWrapper> InternalRegistration<T> {
 
 impl<T: PointerWrapper> Drop for InternalRegistration<T> {
     fn drop(&mut self) {
+        pr_info!("Rust for linux e1000 driver demo (irq::InternalRegistration<T> drop)\n");
         // Unregister irq handler.
         //
         // SAFETY: When `try_new` succeeds, the irq was successfully requested, so it is ok to free

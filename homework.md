@@ -89,6 +89,25 @@ endif
 
 ## 作业4：为e1000网卡驱动添加remove代码
 
+### 在src_1000中运行./build_image.sh，进入qemu后，注册r4l_e1000_demo.ko
+
+![1700019781481](image/homework/1700019781481.png)
+
+### up eth0，在/proc/interrupts中可以看到IRQ11对应到设备0000:00:03.0
+
+![1700029320409](image/homework/1700029320409.png)
+
+### down eth0，rmmod r4l_e1000_demo.ko，此时IRQ11没有对应的设备
+
+![1700029509429](image/homework/1700029509429.png)
+
+### 重新insmod r4l_e1000_demo.rs，并up eth0
+
+![1700029572630](image/homework/1700029572630.png)
+
+### 可以ping通10.0.2.2
+
+![1700029711261](image/homework/1700029711261.png)
 
 ## 作业5：注册字符设备
 

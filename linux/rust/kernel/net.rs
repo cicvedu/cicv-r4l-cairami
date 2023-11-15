@@ -142,6 +142,11 @@ impl Device {
             Ok(unsafe { &*(skb as *const SkBuff) }.into())
         }
     }
+
+    /// Returns raw member
+    pub fn get_member(&self) -> *mut bindings::net_device {
+         self.0.get()
+    }
 }
 
 /// Registration structure for a network device.
@@ -201,6 +206,7 @@ impl<T: DeviceOperations> Registration<T> {
 
 impl<T: DeviceOperations> Drop for Registration<T> {
     fn drop(&mut self) {
+        crate::pr_info!("Rust for linux e1000 driver demo (net::Registration drop)\n");
         // SAFETY: `dev` was allocated during initialization and guaranteed to be valid.
         unsafe {
             if self.registered {
@@ -476,6 +482,14 @@ impl Napi {
         // SAFETY: The existence of a shared reference means `self.0` is valid.
         unsafe {
             bindings::napi_enable(self.0.get());
+        }
+    }
+
+    /// Disable NAPI scheduling.
+    pub fn disable(&self) {
+        // SAFETY: The existence of a shared reference means 'self.0' is valid
+        unsafe {
+            bindings::napi_disable(self.0.get());
         }
     }
 

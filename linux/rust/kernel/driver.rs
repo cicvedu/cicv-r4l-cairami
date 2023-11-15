@@ -8,6 +8,7 @@
 use crate::{error::code::*, str::CStr, sync::Arc, Result, ThisModule};
 use alloc::boxed::Box;
 use core::{cell::UnsafeCell, marker::PhantomData, ops::Deref, pin::Pin};
+use crate::pr_info;
 
 /// A subsystem (e.g., PCI, Platform, Amba, etc.) that allows drivers to be written for it.
 pub trait DriverOps {
@@ -103,6 +104,7 @@ impl<T: DriverOps> Drop for Registration<T> {
         if self.is_registered {
             // SAFETY: This path only runs if a previous call to `T::register` completed
             // successfully.
+            pr_info!("Rust for linux e1000 driver demo (driver drop)\n");
             unsafe { T::unregister(self.concrete_reg.get()) };
         }
     }

@@ -5,15 +5,18 @@
 #![allow(unused)]
 
 use core::iter::Iterator;
+use core::ops::Deref;
 use core::sync::atomic::AtomicPtr;
+use core::borrow::Borrow;
 
-use kernel::pci::Resource;
+use bindings::pci_dev;
+use kernel::pci::{Resource, MappedResource};
 use kernel::prelude::*;
-use kernel::sync::Arc;
+use kernel::sync::{Arc, Lock};
 use kernel::{pci, device, driver, bindings, net, dma, c_str};
 use kernel::device::RawDevice;
 use kernel::sync::SpinLock;
-
+use kernel::net::Registration;
 
 
 mod consts;
@@ -116,6 +119,27 @@ impl NetDevice {
         Ok(rx_ring)
     }
 
+    /// release all rx resources
+    fn e1000_release_all_rx_resources(dev: &net::Device, data: &NetDevicePrvData) {
+        let mut rx_ring_guard = data.rx_ring.lock();
+        if let Some(rx_ring) = rx_ring_guard.take() {
+            for entry in rx_ring.buf.borrow_mut().iter_mut() {
+                if let Some((dma_map, skb)) = entry.take() {
+                    drop(dma_map);
+                    drop(skb);
+                }
+            }
+            drop(rx_ring);
+        }
+    }
+
+    /// release all tx resources
+    fn e1000_release_all_tx_resources(dev: &net::Device, data: &NetDevicePrvData) {
+        let mut tx_ring_guard = data.tx_ring.lock();
+        if let Some(tx_ring) = tx_ring_guard.take() {
+            drop(tx_ring);
+        }
+    }
 
     // corresponding to the C version e1000_clean_tx_irq()
     fn e1000_recycle_tx_queue(dev: &net::Device, data: &NetDevicePrvData) {
@@ -177,6 +201,7 @@ impl net::DeviceOperations for NetDevice {
         // Again, the `irq::Registration` contains an `irq::InternalRegistration` which implemented `Drop`, so 
         // we mustn't let it dropped.
         // TODO: there is memory leak now. 
+        pr_info!("Rust for linux e1000 driver demo (open) {}",data.dev.name());
         let req_reg = kernel::irq::Registration::<E1000InterruptHandler>::try_new(data.irq, irq_prv_data, kernel::irq::flags::SHARED, fmt!("{}",data.dev.name()))?;
         data._irq_handler.store(Box::into_raw(Box::try_new(req_reg)?), core::sync::atomic::Ordering::Relaxed);
 
@@ -191,6 +216,20 @@ impl net::DeviceOperations for NetDevice {
 
     fn stop(_dev: &net::Device, _data: &NetDevicePrvData) -> Result {
         pr_info!("Rust for linux e1000 driver demo (net device stop)\n");
+
+        _dev.netif_carrier_off();
+        _data.napi.disable();
+
+        // unsafe { bindings::free_irq(_data.irq, _data._irq_handler.data) };
+        unsafe {
+            let _irq_handler_ptr = _data._irq_handler.load(core::sync::atomic::Ordering::Relaxed);
+            let _irq_handler_box = Box::from_raw(_irq_handler_ptr);
+        }
+
+        Self::e1000_release_all_rx_resources(_dev, _data);
+        Self::e1000_release_all_tx_resources(_dev, _data);
+        drop(_data);
+
         Ok(())
     }
 
@@ -293,11 +332,21 @@ impl kernel::irq::Handler for E1000InterruptHandler {
 /// the private data for the adapter
 struct E1000DrvPrvData {
     _netdev_reg: net::Registration<NetDevice>,
+    bars: i32,
 }
+
+// unsafe impl Send for E1000DrvPrvData {}
+// unsafe impl Sync for E1000DrvPrvData {}
 
 impl driver::DeviceRemoval for E1000DrvPrvData {
     fn device_remove(&self) {
         pr_info!("Rust for linux e1000 driver demo (device_remove)\n");
+
+        let netdev = self._netdev_reg.dev_get();
+        netdev.netif_carrier_off();
+        netdev.netif_stop_queue();
+
+        drop(&self._netdev_reg);
     }
 }
 
@@ -443,7 +492,6 @@ impl pci::Driver for E1000Drv {
         kernel::spinlock_init!(unsafe{Pin::new_unchecked(&mut tx_ring)}, "tx_ring");
         kernel::spinlock_init!(unsafe{Pin::new_unchecked(&mut rx_ring)}, "rx_ring");
 
-
         netdev_reg.register(Box::try_new(
             NetDevicePrvData {
                 dev: Arc::try_new(common_dev)?,
@@ -456,18 +504,28 @@ impl pci::Driver for E1000Drv {
             }
         )?)?;
 
-        
 
         Ok(Box::try_new(
-            E1000DrvPrvData{
+                E1000DrvPrvData{
                 // Must hold this registration, or the device will be removed.
                 _netdev_reg: netdev_reg,
+                // _pci_dev_ptr:  dev.get_ptr(),
+                // mem_addr: Arc::clone(&mem_addr),
+                bars,
             }
         )?)
     }
 
-    fn remove(data: &Self::Data) {
+    fn remove(dev: &mut pci::Device, data: &Self::Data) {
         pr_info!("Rust for linux e1000 driver demo (remove)\n");
+
+        drop(&data._netdev_reg);
+
+        // drop(&data.mem_addr);
+        unsafe { bindings::pci_release_selected_regions(dev.get_ptr(), data.bars) };
+        unsafe { bindings::pci_disable_device(dev.get_ptr()) };
+
+        drop(data);
     }
 }
 struct E1000KernelMod {
@@ -488,5 +546,6 @@ impl kernel::Module for E1000KernelMod {
 impl Drop for E1000KernelMod {
     fn drop(&mut self) {
         pr_info!("Rust for linux e1000 driver demo (exit)\n");
+        drop(&self._dev);
     }
 }
